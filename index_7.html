@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<!--
+  ===========================================
+  DOKI DOKI QUIZ（擬音語クイズ）  バージョン 0.4
+  ===========================================
+  このファイルは3つの部分でできています。
+    1. <style>  … 見た目（CSS）
+    2. <body>   … 画面の中身（HTML）
+    3. <script> … 動き（JavaScript）
+
+  よく編集するところ（<script> の中）
+    ・QUESTIONS       … クイズの問題（単語一覧もここから自動で作られる）
+    ・MOODS           … 「今の気分」のボタン
+    ・FIREBASE_CONFIG … みんなの気分を集計するための設定
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- ブラウザのタブや検索結果に出る名前 -->
+  <title>DOKI DOKI QUIZ – Japanese Onomatopoeia Quiz</title>
+  <meta name="description" content="Do you know what doki-doki and waku-waku mean? Take the fun 4-choice quiz on Japanese onomatopoeia from manga and anime, and browse the word list.">
+
+  <!-- Google Fonts（マンガっぽい文字） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Dela+Gothic+One&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* ========== 1. 色の設定（ここを変えるとサイト全体の色が変わる） ========== */
+    :root {
+      --bg: #fff8e7;        /* 背景色 */
+      --paper: #ffffff;     /* カードの色 */
+      --ink: #111111;       /* 文字と枠線の色 */
+      --dots: #f0dca8;      /* 背景の水玉の色 */
+      --accent: #ff3b30;    /* メインの色（赤） */
+      --accent-2: #ffd60a;  /* サブの色（黄） */
+      --good: #2bb24c;      /* 正解の色 */
+      --bad: #ff3b30;       /* 不正解の色 */
+      --muted: #666666;     /* うすい文字 */
+      --sound: #74c0fc;     /* 「音」の言葉の色（青） */
+      --state: #8ce99a;     /* 「様子」の言葉の色（緑） */
+      --feeling: #ffa8c5;   /* 「気持ち」の言葉の色（ピンク） */
+    }
+    /* ダークモード（スマホやPCが暗い設定のとき） */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16161a;
+        --paper: #23232a;
+        --ink: #f5f5f5;
+        --dots: #2c2c35;
+        --muted: #aaaaaa;
+      }
+    }
+
+    /* ========== 2. ページ全体 ========== */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Nunito", system-ui, sans-serif;
+      color: var(--ink);
+      background-color: var(--bg);
+      /* マンガのスクリーントーン風の水玉もよう */
+      background-image: radial-gradient(var(--dots) 2px, transparent 2px);
+      background-size: 16px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+    .hidden { display: none !important; }   /* 画面を隠すためのクラス */
+
+    /* ========== 3. ヘッダー（サイト名） ========== */
+    header { text-align: center; margin-bottom: 16px; }
+    .logo {
+      font-family: "Bangers", Impact, sans-serif;
+      font-size: clamp(2.4rem, 8vw, 3.6rem);
+      letter-spacing: 2px;
+      margin: 0;
+      color: var(--accent-2);
+      -webkit-text-stroke: 2px #111;
+      text-shadow: 4px 4px 0 #111;
+      transform: rotate(-2deg);
+    }
+    .tagline { margin: 4px 0 0; font-weight: 800; font-size: 1.1rem; color: var(--muted); }
+
+    /* ========== 4. タブ ========== */
+    .tabs {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      flex: 1;
+      font-family: "Bangers", Impact, sans-serif;
+      font-size: 1.2rem;
+      letter-spacing: 1px;
+      padding: 8px 4px;
+      background: var(--paper);
+      color: var(--ink);
+      border: 3px solid var(--ink);
+      border-radius: 6px;
+      box-shadow: 3px 3px 0 var(--ink);
+      cursor: pointer;
+    }
+    .tab:hover { background: var(--accent-2); color: #111; }
+    .tab.active { background: var(--accent-2); color: #111; transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+
+    /* ========== 5. マンガのコマ風カード ========== */
+    .panel {
+      width: 100%;
+      max-width: 560px;
+      background: var(--paper);
+      border: 4px solid var(--ink);
+      border-radius: 6px;
+      box-shadow: 8px 8px 0 var(--ink);
+      padding: 28px 24px;
+    }
+    .panel-title { font-family: "Bangers", Impact, sans-serif; font-size: 2rem; letter-spacing: 1px; margin: 0; }
+    .panel-lead { margin: 4px 0 16px; line-height: 1.5; }
+
+    /* ========== 6. ボタン ========== */
+    .btn {
+      font-family: "Bangers", Impact, sans-serif;
+      font-size: 1.6rem;
+      letter-spacing: 1px;
+      padding: 10px 28px;
+      background: var(--accent);
+      color: #fff;
+      border: 3px solid #111;
+      border-radius: 6px;
+      box-shadow: 4px 4px 0 #111;
+      cursor: pointer;
+      transition: transform .1s, box-shadow .1s;
+    }
+    .btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #111; }
+    .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #111; }
+    .btn.secondary { background: var(--accent-2); color: #111; }
+
+    /* ========== 7. スタート画面 ========== */
+    #start-screen { text-align: center; }
+    .intro { font-size: 1.1rem; line-height: 1.6; }
+
+    /* ========== 8. 問題画面 ========== */
+    .status {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .progress {
+      height: 12px;
+      border: 3px solid var(--ink);
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-2);
+      transition: width .3s;
+    }
+    /* 擬音語をドーンと見せる「集中線」風のエリア */
+    .sfx-box {
+      text-align: center;
+      padding: 28px 8px;
+      margin-bottom: 8px;
+      background: repeating-conic-gradient(var(--accent-2) 0deg 6deg, transparent 6deg 14deg);
+      border: 3px solid var(--ink);
+      border-radius: 6px;
+    }
+    .sfx {
+      font-family: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+      font-size: clamp(3rem, 14vw, 5rem);
+      line-height: 1.1;
+      color: var(--accent);
+      -webkit-text-stroke: 3px #111;
+      paint-order: stroke fill;
+      text-shadow: 5px 5px 0 #111;
+      display: inline-block;
+      animation: pop .4s ease-out;
+    }
+    .romaji {
+      display: inline-block;
+      margin-top: 8px;
+      background: var(--paper);
+      border: 2px solid var(--ink);
+      border-radius: 20px;
+      padding: 2px 14px;
+      font-weight: 800;
+    }
+    .question-text { text-align: center; font-size: 1.2rem; font-weight: 800; margin: 16px 0; }
+
+    /* 4つの選択肢 */
+    .choices { display: grid; gap: 12px; }
+    .choice {
+      font-family: inherit;
+      font-size: 1.05rem;
+      font-weight: 700;
+      text-align: left;
+      padding: 14px 16px;
+      background: var(--paper);
+      color: var(--ink);
+      border: 3px solid var(--ink);
+      border-radius: 6px;
+      box-shadow: 3px 3px 0 var(--ink);
+      cursor: pointer;
+    }
+    .choice:hover:not(:disabled) { background: var(--accent-2); color: #111; }
+    .choice:disabled { cursor: default; }
+    .choice.correct { background: var(--good); color: #fff; }
+    .choice.wrong   { background: var(--bad);  color: #fff; }
+
+    /* 答えたあとの解説 */
+    .feedback {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border: 3px dashed var(--ink);
+      border-radius: 6px;
+    }
+    .feedback-title { font-family: "Bangers", Impact, sans-serif; font-size: 1.8rem; margin: 0; }
+    .feedback p { margin: 6px 0 14px; line-height: 1.5; }
+
+    /* ========== 9. 結果画面 ========== */
+    #result-screen { text-align: center; }
+    .score-big { font-family: "Bangers", Impact, sans-serif; font-size: 4rem; margin: 0; }
+    .rank-sfx {
+      font-family: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+      font-size: 3rem;
+      color: var(--accent);
+      -webkit-text-stroke: 2px #111;
+      paint-order: stroke fill;
+      margin: 8px 0 0;
+      animation: pop .5s ease-out;
+    }
+    .rank-name { font-size: 1.3rem; font-weight: 800; margin: 4px 0 16px; }
+    .mood-result { font-weight: 700; margin: 0 0 16px; }
+    .buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    /* ========== 10. 単語一覧 ========== */
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .filter {
+      font-family: inherit;
+      font-weight: 800;
+      font-size: .9rem;
+      padding: 6px 12px;
+      background: var(--paper);
+      color: var(--ink);
+      border: 2px solid var(--ink);
+      border-radius: 20px;
+      cursor: pointer;
+    }
+    .filter.active { background: var(--ink); color: var(--paper); }
+    .search {
+      width: 100%;
+      font-family: inherit;
+      font-size: 1rem;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: var(--paper);
+      color: var(--ink);
+      border: 3px solid var(--ink);
+      border-radius: 6px;
+    }
+    .word-count { font-size: .9rem; color: var(--muted); margin-bottom: 12px; }
+    .word-list { display: grid; gap: 12px; }
+    .word-card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 14px;
+      align-items: start;
+      padding: 12px 14px;
+      border: 3px solid var(--ink);
+      border-radius: 6px;
+      box-shadow: 3px 3px 0 var(--ink);
+    }
+    .word-jp {
+      grid-row: span 3;
+      font-family: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+      font-size: 1.6rem;
+      min-width: 4.2em;
+      text-align: center;
+      padding-top: 4px;
+    }
+    .word-jp small { display: block; font-family: "Nunito", sans-serif; font-size: .8rem; font-weight: 800; color: var(--muted); }
+    .word-meaning { font-weight: 800; font-size: 1.05rem; }
+    .word-explain { font-size: .92rem; line-height: 1.45; color: var(--muted); }
+    .badge {
+      justify-self: start;
+      font-size: .75rem;
+      font-weight: 800;
+      padding: 1px 10px;
+      border: 2px solid #111;
+      border-radius: 20px;
+      color: #111;
+    }
+    .badge { white-space: nowrap; }
+    .badge.sound   { background: var(--sound); }
+    .badge.state   { background: var(--state); }
+    .badge.feeling { background: var(--feeling); }
+
+    /* スマホなど画面がせまいときは、単語カードを縦に並べる */
+    @media (max-width: 480px) {
+      .word-card { grid-template-columns: 1fr; }
+      .word-jp { grid-row: auto; text-align: left; min-width: 0; padding-top: 0; }
+      .word-jp small { display: inline; margin-left: 8px; }
+    }
+
+    /* ========== 11. 「今の気分」コーナー ========== */
+    .mood-area {
+      margin: 20px 0 24px;
+      padding: 16px;
+      border: 3px dashed var(--ink);
+      border-radius: 6px;
+      text-align: center;
+    }
+    .mood-title { font-family: "Bangers", Impact, sans-serif; font-size: 1.6rem; letter-spacing: 1px; }
+    .mood-sub { margin: 2px 0 12px; font-size: .95rem; color: var(--muted); }
+    /* 気分ボタンを並べる（画面の幅に合わせて自動で折り返す） */
+    .moods {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+      gap: 8px;
+    }
+    .mood {
+      font-family: inherit;
+      padding: 8px 4px;
+      background: var(--paper);
+      color: var(--ink);
+      border: 2px solid var(--ink);
+      border-radius: 10px;
+      box-shadow: 2px 2px 0 var(--ink);
+      cursor: pointer;
+      line-height: 1.25;
+    }
+    .mood:hover { background: var(--accent-2); color: #111; }
+    .mood .emoji { font-size: 1.5rem; display: block; }
+    .mood .jp { font-weight: 800; display: block; }
+    .mood .ro { font-size: .75rem; color: var(--muted); display: block; }
+    .mood:hover .ro { color: #333; }
+    .mood.selected { background: var(--accent); color: #fff; transform: translate(2px, 2px); box-shadow: none; }
+    .mood.selected .ro { color: #fff; }
+    /* 気分を選んだあとに出る吹き出し */
+    .mood-bubble {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: var(--accent-2);
+      color: #111;
+      border: 3px solid #111;
+      border-radius: 16px;
+      font-weight: 700;
+      animation: pop .3s ease-out;
+    }
+    .mood-bubble b { font-size: 1.1rem; }
+
+    /* みんなの気分グラフ */
+    .mood-stats { margin-top: 18px; padding-top: 14px; border-top: 3px solid var(--ink); text-align: left; }
+    .stats-title { font-family: "Bangers", Impact, sans-serif; font-size: 1.3rem; letter-spacing: 1px; }
+    .stats-total { font-weight: 800; margin: 2px 0 10px; }
+    .stat-row {
+      display: grid;
+      grid-template-columns: 7.2em 1fr 2.2em;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: .95rem;
+    }
+    .stat-label { font-weight: 700; white-space: nowrap; }
+    .stat-bar { height: 14px; border: 2px solid var(--ink); border-radius: 10px; overflow: hidden; }
+    .stat-fill { display: block; height: 100%; background: var(--accent-2); transition: width .5s; }
+    .stat-num { font-weight: 800; text-align: right; }
+    .stat-row.mine .stat-fill { background: var(--accent); }   /* 自分が選んだ気分は赤 */
+    .stats-note { margin-top: 8px; font-size: .8rem; color: var(--muted); }
+
+    footer { margin-top: 28px; font-size: .85rem; color: var(--muted); }
+
+    /* 文字が「ポンッ」と出てくるアニメーション */
+    @keyframes pop {
+      0%   { transform: scale(.3) rotate(-8deg); opacity: 0; }
+      70%  { transform: scale(1.15) rotate(2deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0); }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ========== ヘッダー ========== -->
+  <header>
+    <h1 class="logo">DOKI DOKI QUIZ!</h1>
+    <p class="tagline">Guess the Japanese Onomatopoeia</p>
+  </header>
+
+  <!-- ========== タブ ========== -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="quiz">🎯 QUIZ</button>
+    <button class="tab" data-tab="words">📖 WORDS</button>
+    <button class="tab" data-tab="moods">🌏 MOODS</button>
+  </nav>
+
+  <main class="panel">
+
+    <!-- ################ タブ1：クイズ ################ -->
+    <div id="tab-quiz">
+
+      <!-- ===== スタート画面 ===== -->
+      <section id="start-screen">
+        <div class="sfx">ドキドキ</div>
+        <p class="intro">
+          Japanese is full of fun words for sounds and feelings,
+          like <b>doki-doki</b> and <b>waku-waku</b>.<br>
+          Do you know what they mean? Try <b><span id="per-game">10</span> random questions!</b>
+        </p>
+
+        <!-- 「今の気分」コーナーの定位置（MOODSタブを開くと、そちらに引っ越す） -->
+        <div id="mood-home-start">
+          <div class="mood-area" id="mood-area">
+            <div class="mood-title">HOW DO YOU FEEL RIGHT NOW?</div>
+            <div class="mood-sub">Pick your mood — in Japanese onomatopoeia!</div>
+            <!-- 気分ボタンはJavaScriptが自動で作る -->
+            <div class="moods" id="moods"></div>
+            <!-- 選んだあとに出る説明 -->
+            <div class="mood-bubble hidden" id="mood-bubble"></div>
+
+            <!-- みんなの気分の集計 -->
+            <div class="mood-stats">
+              <div class="stats-title">🌏 TODAY'S MOODS AROUND THE WORLD</div>
+              <div class="stats-total" id="stats-total">Loading...</div>
+              <div id="stats-bars"></div>
+              <div class="stats-note hidden" id="stats-note"></div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn" id="start-btn">START!</button>
+      </section>
+
+      <!-- ===== 問題画面 ===== -->
+      <section id="quiz-screen" class="hidden">
+        <div class="status">
+          <span id="question-count">Q 1 / 10</span>
+          <span id="score-count">Score: 0</span>
+        </div>
+        <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+
+        <div class="sfx-box">
+          <div class="sfx" id="sfx">ドキドキ</div><br>
+          <span class="romaji" id="romaji">doki-doki</span>
+        </div>
+
+        <p class="question-text">What does this word mean?</p>
+
+        <!-- 選択肢のボタンはJavaScriptが自動で作る -->
+        <div class="choices" id="choices"></div>
+
+        <!-- 答えたあとに出る解説 -->
+        <div class="feedback hidden" id="feedback">
+          <p class="feedback-title" id="feedback-title">CORRECT!</p>
+          <p id="feedback-text"></p>
+          <button class="btn secondary" id="next-btn">NEXT ▶</button>
+        </div>
+      </section>
+
+      <!-- ===== 結果画面 ===== -->
+      <section id="result-screen" class="hidden">
+        <p>Your score</p>
+        <p class="score-big" id="final-score">7 / 10</p>
+        <p class="rank-sfx" id="rank-sfx">ワクワク</p>
+        <p class="rank-name" id="rank-name">Waku-Waku Learner</p>
+        <!-- 選んだ気分をここに表示（選んでいなければ隠れる） -->
+        <p class="mood-result hidden" id="mood-result"></p>
+        <div class="buttons">
+          <button class="btn" id="share-btn">SHARE</button>
+          <button class="btn secondary" id="retry-btn">PLAY AGAIN</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ################ タブ2：単語一覧 ################ -->
+    <div id="tab-words" class="hidden">
+      <h2 class="panel-title">📖 WORD LIST</h2>
+      <p class="panel-lead">Every word from the quiz, with its meaning. Study here, then take the quiz!</p>
+
+      <!-- 種類で絞り込むボタン（JavaScriptが自動で作る） -->
+      <div class="filters" id="filters"></div>
+      <input class="search" id="search" type="search" placeholder="Search (e.g. rain, kira, happy)">
+      <div class="word-count" id="word-count"></div>
+      <div class="word-list" id="word-list"></div>
+    </div>
+
+    <!-- ################ タブ3：気分 ################ -->
+    <div id="tab-moods" class="hidden">
+      <h2 class="panel-title">🌏 MOODS</h2>
+      <p class="panel-lead">Share how you feel today and see how everyone else is feeling.</p>
+      <!-- MOODSタブを開いたとき、「今の気分」コーナーがここに引っ越してくる -->
+      <div id="mood-home-tab"></div>
+    </div>
+
+  </main>
+
+  <footer>© 2026 DOKI DOKI QUIZ</footer>
+
+  <script>
+    // =====================================================
+    //  ★ 問題データ ★
+    //  ※ 同じ言葉でも意味がちがえば、別の問題として入れてOK（例：ゴロゴロ）
+    //  ここに問題を追加すると、クイズと単語一覧の両方に自動で出てくるよ。
+    //    sfx      … 日本語の言葉
+    //    romaji   … ローマ字
+    //    category … 種類（"sound" 音 / "state" 様子 / "feeling" 気持ち）
+    //    meaning  … 正しい意味（これが正解になる）
+    //    wrong    … まちがいの選択肢を3つ
+    //    explain  … 答えたあとの解説
+    // =====================================================
+    const QUESTIONS = [
+      // ---------- 音の言葉（擬音語） ----------
+      { sfx: "ザーザー", romaji: "zaa-zaa", category: "sound",
+        meaning: "Pouring rain", wrong: ["Light drizzle", "Wind howling", "Water boiling"],
+        explain: "The loud sound of rain coming down hard. It's also used for TV static." },
+      { sfx: "シトシト", romaji: "shito-shito", category: "sound",
+        meaning: "Gentle, quiet rain", wrong: ["A heavy storm", "Snow falling", "Footsteps"],
+        explain: "Soft, steady rain — the calm kind you hear during Japan's rainy season." },
+      { sfx: "ゴロゴロ", romaji: "goro-goro", category: "sound",
+        meaning: "Rumbling thunder", wrong: ["Birds singing", "A door slamming", "Glass breaking"],
+        explain: "Deep rumbling, like thunder. It can also mean lazing around at home, or a cat purring!" },
+      { sfx: "ワンワン", romaji: "wan-wan", category: "sound",
+        meaning: "A dog barking", wrong: ["A cat meowing", "A bird chirping", "A cow mooing"],
+        explain: "Japanese dogs say \"wan-wan\" instead of \"woof.\" Kids even call dogs \"wan-chan\"!" },
+      { sfx: "ピンポン", romaji: "pin-pon", category: "sound",
+        meaning: "A doorbell chime", wrong: ["A car horn", "A phone vibrating", "A sneeze"],
+        explain: "The ding-dong of a doorbell. On quiz shows it also means \"Correct!\" — just like this quiz." },
+      { sfx: "ガチャ", romaji: "gacha", category: "sound",
+        meaning: "The clunk of a handle or lock turning", wrong: ["A balloon popping", "Water splashing", "A soft sigh"],
+        explain: "The clunk of a door handle, a lock, or a capsule-toy machine. That's where \"gacha games\" got their name!" },
+      { sfx: "ドカーン", romaji: "dokaan", category: "sound",
+        meaning: "A big explosion", wrong: ["A tiny click", "Leaves rustling", "A quiet whisper"],
+        explain: "A huge BOOM! You'll see it in giant letters in action manga." },
+      { sfx: "パチパチ", romaji: "pachi-pachi", category: "sound",
+        meaning: "Clapping hands", wrong: ["Snoring", "Heavy footsteps", "Teeth chattering"],
+        explain: "The sound of applause. It's also used for a crackling fire or blinking eyes." },
+      { sfx: "ゲラゲラ", romaji: "gera-gera", category: "sound",
+        meaning: "Laughing out loud", wrong: ["Smiling quietly", "Sobbing", "Snoring"],
+        explain: "Big, loud belly laughter. A quiet smile would be \"niko-niko\" instead." },
+      { sfx: "ズルズル", romaji: "zuru-zuru", category: "sound",
+        meaning: "Slurping noodles", wrong: ["Crunching chips", "Chewing gum", "Blowing a whistle"],
+        explain: "Slurping ramen or soba is totally polite in Japan! It also means dragging something along." },
+
+      // ---------- 様子・動きの言葉（擬態語） ----------
+      { sfx: "キラキラ", romaji: "kira-kira", category: "state",
+        meaning: "Sparkling, shining", wrong: ["Sticky", "Crunchy", "Dizzy"],
+        explain: "Used for stars, jewels, and sparkly anime eyes." },
+      { sfx: "ピカピカ", romaji: "pika-pika", category: "state",
+        meaning: "Shiny and spotless", wrong: ["Dusty and old", "Wrinkled", "Soaking wet"],
+        explain: "Shiny-clean, or flashing with light. Fun fact: Pikachu's name comes from \"pika\"!" },
+      { sfx: "ニコニコ", romaji: "niko-niko", category: "state",
+        meaning: "Smiling happily", wrong: ["Crying loudly", "Laughing out loud", "Frowning"],
+        explain: "A warm, gentle smile. For laughing out loud, Japanese uses \"gera-gera.\"" },
+      { sfx: "ペコペコ", romaji: "peko-peko", category: "state",
+        meaning: "Very hungry", wrong: ["Very tired", "Very happy", "Very cold"],
+        explain: "\"Onaka ga peko-peko\" means \"I'm starving!\" It can also mean bowing again and again." },
+      { sfx: "フワフワ", romaji: "fuwa-fuwa", category: "state",
+        meaning: "Soft and fluffy", wrong: ["Hard and rough", "Sharp and pointy", "Heavy and wet"],
+        explain: "Fluffy like clouds, pancakes, or a puppy's fur. It can also mean feeling floaty." },
+      { sfx: "サクサク", romaji: "saku-saku", category: "state",
+        meaning: "Light and crispy", wrong: ["Soggy", "Sticky", "Frozen solid"],
+        explain: "The light crunch of tempura or cookies. It also means things are going quickly and smoothly." },
+      { sfx: "モチモチ", romaji: "mochi-mochi", category: "state",
+        meaning: "Soft, bouncy, and chewy", wrong: ["Dry and crumbly", "Watery", "Burnt"],
+        explain: "Named after mochi (rice cake) — for chewy, springy food like udon or tapioca." },
+      { sfx: "ジロジロ", romaji: "jiro-jiro", category: "state",
+        meaning: "Staring at someone", wrong: ["Tiptoeing quietly", "Yawning", "Whistling"],
+        explain: "Staring hard at someone — usually in a rude way." },
+      { sfx: "ギリギリ", romaji: "giri-giri", category: "state",
+        meaning: "Just barely, at the last second", wrong: ["Way too early", "Slowly and carefully", "Completely"],
+        explain: "\"Giri-giri safe!\" means \"Made it just in time!\" It's also the sound of grinding teeth." },
+      { sfx: "ペラペラ", romaji: "pera-pera", category: "state",
+        meaning: "Speaking fluently", wrong: ["Stuttering", "Whispering", "Staying silent"],
+        explain: "\"Nihongo ga pera-pera\" means \"fluent in Japanese.\" Maybe you'll be pera-pera soon!" },
+      { sfx: "ごろごろ", romaji: "goro-goro", category: "state",
+        meaning: "Lazing around at home", wrong: ["Cleaning the whole house", "Running errands in a hurry", "Throwing a big party"],
+        explain: "Rolling around on the sofa doing nothing — the perfect lazy day. It's the same word as the thunder \"goro-goro\": both come from the image of something heavy rolling around." },
+
+      // ---------- 気持ちの言葉（擬情語） ----------
+      { sfx: "ドキドキ", romaji: "doki-doki", category: "feeling",
+        meaning: "Heart pounding", wrong: ["Very sleepy", "Bored", "Very full"],
+        explain: "The sound of a racing heart — used when you're nervous, scared, or in love." },
+      { sfx: "ワクワク", romaji: "waku-waku", category: "feeling",
+        meaning: "Excited and can't wait", wrong: ["Sleepy", "Angry", "Shivering from cold"],
+        explain: "That thrilled feeling before something fun, like a trip or a new episode." },
+      { sfx: "ウキウキ", romaji: "uki-uki", category: "feeling",
+        meaning: "Cheerful and bouncy", wrong: ["Grumpy", "Scared", "Bored"],
+        explain: "A happy, light feeling — like when the weekend is coming." },
+      { sfx: "イライラ", romaji: "ira-ira", category: "feeling",
+        meaning: "Irritated and annoyed", wrong: ["Calm and relaxed", "Sleepy", "Proud"],
+        explain: "That annoyed feeling when things don't go your way." },
+      { sfx: "モヤモヤ", romaji: "moya-moya", category: "feeling",
+        meaning: "Uneasy — something's bugging you", wrong: ["Totally satisfied", "Very hungry", "Full of energy"],
+        explain: "A foggy, unsettled feeling when something doesn't sit right." },
+      { sfx: "ハラハラ", romaji: "hara-hara", category: "feeling",
+        meaning: "On the edge of your seat", wrong: ["Bored", "Sleepy", "Relieved"],
+        explain: "Nervous while watching something risky — like a close game or a scary scene." },
+      { sfx: "ガーン", romaji: "gaan", category: "feeling",
+        meaning: "Shocked and stunned", wrong: ["Delighted", "Sleepy", "Hungry"],
+        explain: "The \"GAAN!\" of sudden shock or disappointment. Very common in manga!" },
+      { sfx: "ルンルン", romaji: "run-run", category: "feeling",
+        meaning: "In a great mood, humming along", wrong: ["Feeling sick", "Feeling lonely", "Feeling nervous"],
+        explain: "So happy you want to hum and skip down the street." },
+      { sfx: "ゾクゾク", romaji: "zoku-zoku", category: "feeling",
+        meaning: "Shivers down your spine", wrong: ["Warm and cozy", "Sleepy", "Full"],
+        explain: "Chills from cold, fear, or even excitement." },
+      { sfx: "メラメラ", romaji: "mera-mera", category: "feeling",
+        meaning: "Fired up", wrong: ["Calm and quiet", "Sad and tearful", "Tired out"],
+        explain: "Burning like a flame — full of passion or rivalry." }
+    ];
+
+    // 言葉の種類（単語一覧のラベルと色）
+    const CATEGORIES = {
+      sound:   { label: "Sounds",           jp: "擬音語 giongo" },
+      state:   { label: "States & Actions", jp: "擬態語 gitaigo" },
+      feeling: { label: "Feelings",         jp: "擬情語 gijōgo" }
+    };
+
+    // 1回のクイズで出す問題の数
+    const QUESTIONS_PER_GAME = 10;
+
+    // 正解率に応じた「称号」（min% 以上ならその称号）
+    const RANKS = [
+      { min: 100, sfx: "ドッカーン!", name: "Dokkaan! Onomatopoeia Master" },
+      { min: 80,  sfx: "ドキドキ",   name: "Doki-Doki Pro" },
+      { min: 50,  sfx: "ワクワク",   name: "Waku-Waku Learner" },
+      { min: 0,   sfx: "ポツポツ",   name: "Potsu-Potsu Beginner" }
+    ];
+
+    // =====================================================
+    //  ★ 気分データ ★
+    //  ここに足すと「今の気分」のボタンが増えるよ。
+    //  （Firebaseのルールにもローマ字を足すのを忘れずに）
+    // =====================================================
+    const MOODS = [
+      { jp: "わくわく",   romaji: "waku-waku",  emoji: "🤩", meaning: "Excited — can't wait for something fun!" },
+      { jp: "ウキウキ",   romaji: "uki-uki",    emoji: "🎶", meaning: "Cheerful and bouncy — a happy spring in your step!" },
+      { jp: "ドキドキ",   romaji: "doki-doki",  emoji: "💓", meaning: "Heart racing — nervous, or maybe in love." },
+      { jp: "しょんぼり", romaji: "shonbori",   emoji: "😞", meaning: "Down and discouraged, shoulders drooping." },
+      { jp: "どんより",   romaji: "donyori",    emoji: "🌧️", meaning: "Gloomy and heavy, like a cloudy gray sky." },
+      { jp: "まあまあ",   romaji: "maa-maa",    emoji: "😐", meaning: "So-so. Not great, not bad." },
+      { jp: "しくしく",   romaji: "shiku-shiku", emoji: "😢", meaning: "Crying quietly, softly sniffling." },
+      { jp: "メラメラ",   romaji: "mera-mera",  emoji: "🔥", meaning: "Fired up! Burning with passion or rivalry." },
+      { jp: "もやもや",   romaji: "moya-moya",  emoji: "🌫️", meaning: "Uneasy and foggy — something's bugging you." },
+      { jp: "しんみり",   romaji: "shinmiri",   emoji: "🍂", meaning: "Quietly sentimental and a little wistful." },
+      { jp: "ごろごろ",   romaji: "goro-goro",  emoji: "🛋️", meaning: "Lazy mode — just lounging around." }
+    ];
+
+    // =====================================================
+    //  ★ Firebaseの設定 ★
+    //  Firebaseのサイトでもらった設定を、ここに貼り付けてね。
+    //  空っぽのままだと「お試しモード」で動くよ。
+    // =====================================================
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyBRPuzuCv8TyMs4E7cpUu7BrZqoo54c2Ts",
+      authDomain: "doki-doki-quiz.firebaseapp.com",
+      databaseURL: "https://doki-doki-quiz-default-rtdb.firebaseio.com",
+      projectId: "doki-doki-quiz",
+      storageBucket: "doki-doki-quiz.firebasestorage.app",
+      messagingSenderId: "16162948356",
+      appId: "1:16162948356:web:5f99657ba34a3c6bca7c51",
+      measurementId: "G-1C6JBKM8G5"
+    };
+
+    // =====================================================
+    //  ここから下は「動き」のプログラム
+    // =====================================================
+
+    // HTMLの部品をIDで取ってくる
+    const $ = (id) => document.getElementById(id);
+
+    // 配列の順番をランダムに並べ替える関数
+    function shuffle(array) {
+      const copy = [...array];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    // ---------------- タブの切り替え ----------------
+    function showTab(name) {
+      // 押したタブだけ色を付ける
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.classList.toggle("active", tab.dataset.tab === name);
+      });
+      // 選んだタブの中身だけ表示する
+      ["quiz", "words", "moods"].forEach((t) => {
+        $("tab-" + t).classList.toggle("hidden", t !== name);
+      });
+      // 「今の気分」コーナーを、今見ているタブに引っ越しさせる
+      //（同じものを2つ作らずに、1つを移動させて使い回す小ワザ）
+      const moodArea = $("mood-area");
+      if (name === "moods") {
+        $("mood-home-tab").appendChild(moodArea);
+      } else {
+        $("mood-home-start").appendChild(moodArea);
+      }
+    }
+
+    // ---------------- クイズ ----------------
+    let gameQuestions = [];  // 今回出す問題のリスト
+    let current = 0;         // 今、何問目か（0から数える）
+    let score = 0;           // 正解の数
+
+    // 画面を切り替える関数（name の画面だけ表示する）
+    function showScreen(name) {
+      ["start-screen", "quiz-screen", "result-screen"].forEach((id) => {
+        $(id).classList.toggle("hidden", id !== name);
+      });
+    }
+
+    // ゲームを始める
+    function startGame() {
+      gameQuestions = shuffle(QUESTIONS).slice(0, QUESTIONS_PER_GAME);
+      current = 0;
+      score = 0;
+      showScreen("quiz-screen");
+      showQuestion();
+    }
+
+    // 問題を表示する
+    function showQuestion() {
+      const q = gameQuestions[current];
+
+      $("question-count").textContent = `Q ${current + 1} / ${gameQuestions.length}`;
+      $("score-count").textContent = `Score: ${score}`;
+      $("progress-bar").style.width = `${(current / gameQuestions.length) * 100}%`;
+
+      // 擬音語を表示（アニメーションをもう一度再生するための小ワザ付き）
+      const sfxEl = $("sfx");
+      sfxEl.textContent = q.sfx;
+      sfxEl.style.animation = "none";
+      sfxEl.offsetHeight;
+      sfxEl.style.animation = "";
+      $("romaji").textContent = q.romaji;
+
+      // 選択肢のボタンを作る（正解1つ＋まちがい3つを、ランダムな順番で）
+      const box = $("choices");
+      box.innerHTML = "";
+      shuffle([q.meaning, ...q.wrong]).forEach((text) => {
+        const button = document.createElement("button");
+        button.className = "choice";
+        button.textContent = text;
+        button.addEventListener("click", () => checkAnswer(button, text));
+        box.appendChild(button);
+      });
+
+      $("feedback").classList.add("hidden");
+    }
+
+    // 答え合わせ
+    function checkAnswer(clickedButton, chosenText) {
+      const q = gameQuestions[current];
+      const isCorrect = chosenText === q.meaning;
+      if (isCorrect) score++;
+
+      // すべてのボタンを押せなくして、正解を緑に、間違いを赤にする
+      document.querySelectorAll(".choice").forEach((button) => {
+        button.disabled = true;
+        if (button.textContent === q.meaning) button.classList.add("correct");
+      });
+      if (!isCorrect) clickedButton.classList.add("wrong");
+
+      // 解説を表示
+      $("feedback-title").textContent = isCorrect ? "PINPON! Correct!" : "BUBBU! Not quite...";
+      $("feedback-text").textContent = q.explain;
+      $("score-count").textContent = `Score: ${score}`;
+      $("next-btn").textContent = current === gameQuestions.length - 1 ? "SEE RESULT ▶" : "NEXT ▶";
+      $("feedback").classList.remove("hidden");
+    }
+
+    // 次の問題へ（最後なら結果画面へ）
+    function nextQuestion() {
+      current++;
+      if (current < gameQuestions.length) {
+        showQuestion();
+      } else {
+        showResult();
+      }
+    }
+
+    // 今の点数に合う称号を探す
+    function getRank() {
+      const percent = (score / gameQuestions.length) * 100;
+      return RANKS.find((r) => percent >= r.min);
+    }
+
+    // 結果を表示する
+    function showResult() {
+      const rank = getRank();
+      $("final-score").textContent = `${score} / ${gameQuestions.length}`;
+      $("rank-sfx").textContent = rank.sfx;
+      $("rank-name").textContent = rank.name;
+
+      // 気分を選んでいたら、結果画面にも表示する
+      if (selectedMood) {
+        $("mood-result").textContent = `Today's mood: ${selectedMood.emoji} ${selectedMood.jp} (${selectedMood.romaji})`;
+        $("mood-result").classList.remove("hidden");
+      } else {
+        $("mood-result").classList.add("hidden");
+      }
+      showScreen("result-screen");
+    }
+
+    // 結果をSNSでシェアする（X / Twitter）
+    function share() {
+      const rank = getRank();
+      let text = `I scored ${score}/${gameQuestions.length} on DOKI DOKI QUIZ, the Japanese onomatopoeia quiz, and got "${rank.name}"!`;
+      if (selectedMood) text += ` Today I'm feeling ${selectedMood.jp} (${selectedMood.romaji}) ${selectedMood.emoji}.`;
+      text += " Can you beat me?";
+      let url = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text);
+      // ネットに公開されているときは、サイトのURLも一緒にシェアする
+      if (location.protocol.startsWith("http")) url += "&url=" + encodeURIComponent(location.href);
+      window.open(url, "_blank");
+    }
+
+    // ---------------- 単語一覧 ----------------
+    let currentFilter = "all";   // 今選んでいる種類
+
+    // 種類の絞り込みボタンを作る
+    function createFilters() {
+      const options = [["all", "All"], ...Object.entries(CATEGORIES).map(([key, c]) => [key, c.label])];
+      $("filters").innerHTML = options.map(([key, label]) =>
+        `<button class="filter${key === currentFilter ? " active" : ""}" data-filter="${key}">${label}</button>`
+      ).join("");
+      document.querySelectorAll(".filter").forEach((button) => {
+        button.addEventListener("click", () => {
+          currentFilter = button.dataset.filter;
+          createFilters();
+          renderWordList();
+        });
+      });
+    }
+
+    // 単語カードを表示する
+    function renderWordList() {
+      const keyword = $("search").value.trim().toLowerCase();
+      const words = QUESTIONS.filter((q) => {
+        const matchCategory = currentFilter === "all" || q.category === currentFilter;
+        const text = `${q.sfx} ${q.romaji} ${q.meaning} ${q.explain}`.toLowerCase();
+        return matchCategory && text.includes(keyword);
+      });
+
+      $("word-count").textContent = `${words.length} of ${QUESTIONS.length} words`;
+      $("word-list").innerHTML = words.map((q) => {
+        const c = CATEGORIES[q.category];
+        return `
+          <div class="word-card">
+            <div class="word-jp">${q.sfx}<small>${q.romaji}</small></div>
+            <span class="badge ${q.category}">${c.label} · ${c.jp.split(" ")[0]}</span>
+            <div class="word-meaning">${q.meaning}</div>
+            <div class="word-explain">${q.explain}</div>
+          </div>`;
+      }).join("") || `<p>No words found. Try another search!</p>`;
+    }
+
+    // ---------------- 今の気分 ----------------
+    let selectedMood = null;  // 今選んでいる気分
+    let votedMood = null;     // 今日この人が投票した気分（ローマ字）
+    let counts = {};          // 気分ごとの人数 例：{ "waku-waku": 3, "goro-goro": 5 }
+    let db = null;            // Firebaseのデータベース（つながったら入る）
+    let fb = null;            // Firebaseの道具箱
+
+    // 気分ボタンを作る
+    function createMoodButtons() {
+      const box = $("moods");
+      MOODS.forEach((mood) => {
+        const button = document.createElement("button");
+        button.className = "mood";
+        button.dataset.mood = mood.romaji;   // どの気分のボタンか目印を付けておく
+        button.innerHTML = `
+          <span class="emoji">${mood.emoji}</span>
+          <span class="jp">${mood.jp}</span>
+          <span class="ro">${mood.romaji}</span>`;
+        button.addEventListener("click", () => selectMood(button, mood));
+        box.appendChild(button);
+      });
+    }
+
+    // 気分を選んだときの処理
+    function selectMood(clickedButton, mood, shouldVote = true) {
+      selectedMood = mood;
+      // 今日まだ投票していない or 別の気分に変えた ときだけ集計に送る
+      if (shouldVote && votedMood !== mood.romaji) {
+        sendVote(mood.romaji, votedMood);
+        votedMood = mood.romaji;
+        rememberVote(mood.romaji);
+      }
+      // 前に選んでいたボタンの色を戻して、今押したボタンだけ色を付ける
+      document.querySelectorAll(".mood").forEach((b) => b.classList.remove("selected"));
+      clickedButton.classList.add("selected");
+      // 吹き出しで意味を表示
+      const bubble = $("mood-bubble");
+      bubble.innerHTML = `<b>${mood.emoji} ${mood.jp} (${mood.romaji})</b><br>${mood.meaning}`;
+      bubble.classList.remove("hidden");
+      bubble.style.animation = "none";
+      bubble.offsetHeight;
+      bubble.style.animation = "";
+      renderStats();
+    }
+
+    // 今日の日付を "2026-09-23" の形で返す（世界共通の時間＝UTCで区切る）
+    function todayKey() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    // この人が今日投票したかどうかを、ブラウザに覚えておく
+    function rememberVote(romaji) {
+      try { localStorage.setItem("dokidoki-mood", JSON.stringify({ day: todayKey(), mood: romaji })); } catch (e) {}
+    }
+    function loadVote() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("dokidoki-mood"));
+        if (saved && saved.day === todayKey()) return saved.mood;
+      } catch (e) {}
+      return null;
+    }
+
+    // Firebaseにつなぐ
+    async function connectDatabase() {
+      // 設定が空っぽなら「お試しモード」（この画面の中だけで数える）
+      if (!FIREBASE_CONFIG.databaseURL) {
+        $("stats-note").textContent = "Demo mode: counts are only on this device for now.";
+        $("stats-note").classList.remove("hidden");
+        renderStats();
+        return;
+      }
+      try {
+        const base = "https://www.gstatic.com/firebasejs/12.19.0/";
+        const { initializeApp } = await import(base + "firebase-app.js");
+        fb = await import(base + "firebase-database.js");
+        db = fb.getDatabase(initializeApp(FIREBASE_CONFIG));
+        // 今日の集計を見張って、数が変わったらすぐ表示を更新する（リアルタイム）
+        fb.onValue(fb.ref(db, "moods/" + todayKey()), (snapshot) => {
+          counts = snapshot.val() || {};
+          renderStats();
+        });
+      } catch (error) {
+        console.error(error);
+        db = null;
+        $("stats-note").textContent = "Couldn't load everyone's moods right now.";
+        $("stats-note").classList.remove("hidden");
+        renderStats();
+      }
+    }
+
+    // 投票を送る（前の気分があれば1減らして、新しい気分を1増やす）
+    function sendVote(newMood, oldMood) {
+      if (!db) {
+        // お試しモード：この画面の中だけで数える
+        counts[newMood] = (counts[newMood] || 0) + 1;
+        if (oldMood) counts[oldMood] = Math.max(0, (counts[oldMood] || 0) - 1);
+        renderStats();
+        return;
+      }
+      const day = todayKey();
+      const changes = {};
+      changes[`moods/${day}/${newMood}`] = fb.increment(1);
+      if (oldMood) changes[`moods/${day}/${oldMood}`] = fb.increment(-1);
+      fb.update(fb.ref(db), changes).catch((error) => console.error(error));
+    }
+
+    // 集計をグラフで表示する
+    function renderStats() {
+      const total = MOODS.reduce((sum, m) => sum + (counts[m.romaji] || 0), 0);
+      $("stats-total").textContent = total === 0
+        ? "No one has shared a mood yet today. Be the first!"
+        : `👥 ${total} ${total === 1 ? "person has" : "people have"} shared a mood today`;
+
+      // 人数の多い順に並べる
+      const sorted = [...MOODS].sort((a, b) => (counts[b.romaji] || 0) - (counts[a.romaji] || 0));
+      $("stats-bars").innerHTML = sorted.map((m) => {
+        const n = counts[m.romaji] || 0;
+        const percent = total ? Math.round((n / total) * 100) : 0;
+        const mine = m.romaji === votedMood ? " mine" : "";
+        return `
+          <div class="stat-row${mine}">
+            <span class="stat-label">${m.emoji} ${m.jp}</span>
+            <span class="stat-bar"><span class="stat-fill" style="width:${percent}%"></span></span>
+            <span class="stat-num">${n}</span>
+          </div>`;
+      }).join("");
+    }
+
+    // =====================================================
+    //  ページを開いたときに最初に動かす処理
+    // =====================================================
+    $("per-game").textContent = QUESTIONS_PER_GAME;
+    createFilters();
+    renderWordList();
+    createMoodButtons();
+
+    // 今日すでに投票していたら、その気分を選んだ状態にしておく（2回数えない）
+    votedMood = loadVote();
+    if (votedMood) {
+      const savedMood = MOODS.find((m) => m.romaji === votedMood);
+      const savedButton = document.querySelector(`.mood[data-mood="${votedMood}"]`);
+      if (savedMood && savedButton) selectMood(savedButton, savedMood, false);
+    }
+    connectDatabase();
+
+    // ボタンを押したときに何をするか登録する
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => showTab(tab.dataset.tab));
+    });
+    $("search").addEventListener("input", renderWordList);
+    $("start-btn").addEventListener("click", startGame);
+    $("next-btn").addEventListener("click", nextQuestion);
+    $("retry-btn").addEventListener("click", startGame);
+    $("share-btn").addEventListener("click", share);
+  </script>
+</body>
+</html>
